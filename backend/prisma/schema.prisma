@@ -1,0 +1,243 @@
+// 1. backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum ExamCategory {
+  CLASS_TEST
+  FIRST_TERM
+  SECOND_TERM
+  FINAL_EXAM
+}
+
+enum DayOfWeek {
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+}
+
+enum FeeStatus {
+  PENDING
+  PAID
+  OVERDUE
+}
+
+model User {
+  id           String    @id @default(uuid())
+  schoolId     String    @unique @map("school_id")
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  fullName     String    @map("full_name")
+  role         UserRole  @default(STUDENT)
+  isActive     Boolean   @default(true) @map("is_active")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  mentoredSections  Section[]           @relation("MentorTeacher")
+  subjectClasses    SubjectClass[]
+  enrollments       SectionEnrollment[]
+  attendanceRecords DailyAttendance[]
+  studentFees       StudentFee[]      
+  marks             Mark[]
+  finalResults      FinalResult[]
+
+  @@map("users")
+}
+
+model AcademicYear {
+  id        String   @id @default(uuid())
+  yearName  String   @map("year_name")
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  isActive  Boolean  @default(false) @map("is_active")
+
+  sections      Section[]
+  finalResults  FinalResult[]
+  feeStructures FeeStructure[]
+
+  @@map("academic_years")
+}
+
+model Section {
+  id             String       @id @default(uuid())
+  academicYearId String       @map("academic_year_id")
+  classLevel     Int          @map("class_level")
+  sectionName    String       @map("section_name")
+  mentorId       String?      @map("mentor_teacher_id")
+  roomNumber     String?      @map("room_number")
+
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  mentor         User?        @relation("MentorTeacher", fields: [mentorId], references: [id])
+
+  enrollments    SectionEnrollment[]
+  subjectClasses SubjectClass[]
+  attendance     DailyAttendance[]
+  finalResults   FinalResult[]
+  routineSlots   RoutineSlot[] 
+
+  @@unique([academicYearId, classLevel, sectionName])
+  @@map("sections")
+}
+
+model SectionEnrollment {
+  studentId  String  @map("student_id")
+  sectionId  String  @map("section_id")
+  rollNumber Int?    @map("roll_number")
+
+  student    User    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  section    Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@id([studentId, sectionId])
+  @@map("section_enrollments")
+}
+
+model Course {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  name       String
+  classLevel Int      @map("class_level")
+
+  subjectClasses SubjectClass[]
+
+  @@map("courses")
+}
+
+model SubjectClass {
+  id        String  @id @default(uuid())
+  sectionId String  @map("section_id")
+  courseId  String  @map("course_id")
+  teacherId String? @map("teacher_id")
+
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  course  Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  teacher User?   @relation(fields: [teacherId], references: [id])
+  
+  assessments  Assessment[]  
+  routineSlots RoutineSlot[] 
+  
+  @@unique([sectionId, courseId])
+  @@map("subject_classes")
+}
+
+model RoutineSlot {
+  id             String    @id @default(uuid())
+  day            DayOfWeek 
+  period         Int       
+  subjectClassId String
+  subjectClass   SubjectClass @relation(fields: [subjectClassId], references: [id], onDelete: Cascade)
+  sectionId      String   
+  section        Section   @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([sectionId, day, period]) 
+  @@map("routine_slots")
+}
+
+model DailyAttendance {
+  id         String   @id @default(uuid())
+  studentId  String   @map("student_id")
+  sectionId  String   @map("section_id")
+  date       DateTime @default(now()) @db.Date
+  isPresent  Boolean  @default(false) @map("is_present")
+  lateReason String?  @map("late_reason")
+
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  section    Section  @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, sectionId, date])
+  @@map("daily_attendance")
+}
+
+model Assessment {
+  id             String       @id @default(uuid())
+  subjectClassId String       @map("subject_class_id")
+  title          String
+  category       ExamCategory
+  totalMarks     Int          @default(100) @map("total_marks")
+  examDate       DateTime?    @map("exam_date") @db.Date
+
+  subjectClass   SubjectClass @relation(fields: [subjectClassId], references: [id], onDelete: Cascade)
+  marks          Mark[]
+
+  @@map("assessments")
+}
+
+model Mark {
+  id           String     @id @default(uuid())
+  assessmentId String     @map("assessment_id")
+  studentId    String     @map("student_id")
+  obtainedMark Decimal    @map("obtained_mark") @db.Decimal(5, 2)
+
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student      User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, studentId])
+  @@map("marks")
+}
+
+model FinalResult {
+  id             String       @id @default(uuid())
+  studentId      String       @map("student_id")
+  sectionId      String       @map("section_id")
+  academicYearId String       @map("academic_year_id")
+  gpa            Decimal?     @db.Decimal(3, 2)
+  gradeLetter    String?      @map("grade_letter")
+  rankInSection  Int?         @map("rank_in_section")
+  rankInClass    Int?         @map("rank_in_class")
+
+  student        User         @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  section        Section      @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+
+  @@unique([studentId, sectionId, academicYearId])
+  @@map("final_results")
+}
+
+model FeeStructure {
+  id             String   @id @default(uuid())
+  name           String
+  amount         Decimal
+  description    String?
+  classLevel     Int      
+  targetSection  String?  
+  academicYearId String
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id])
+  studentFees    StudentFee[] 
+  createdAt      DateTime @default(now())
+}
+
+model StudentFee {
+  id             String    @id @default(uuid())
+  status         FeeStatus @default(PENDING)
+  dueDate        DateTime
+  paidDate       DateTime?
+  studentId      String
+  student        User      @relation(fields: [studentId], references: [id])
+  feeStructureId String
+  feeStructure   FeeStructure @relation(fields: [feeStructureId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+}
+
+model Notice {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  category  String   @default("GENERAL")
+  postedBy  String 
+  createdAt DateTime @default(now())
+}
