@@ -1,8 +1,7 @@
-// 2. backend/index.js
-
 const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
+require('dotenv').config(); // Ensure env variables are loaded
 
 // Route Imports
 const authRoutes = require('./routes/authRoutes');
@@ -18,17 +17,18 @@ const routineRoutes = require('./routes/routineRoutes');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// 1. Middleware
 app.use(express.json());
 app.use(cookieParser());
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: process.env.CLIENT_URL || "*",
+  methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true
 }));
 
-// Routes
-app.use('/auth', authRoutes); // Handles Login/Logout
-app.use('/users', userRoutes); // Handles Create Student / Update Profile
+// 2. Routes
+app.use('/auth', authRoutes);
+app.use('/users', userRoutes);
 app.use('/finance', financeRoutes);
 app.use('/courses', courseRoutes);
 app.use('/exams', examRoutes);
@@ -37,6 +37,20 @@ app.use('/dashboard', dashboardRoutes);
 app.use('/notices', noticeRoutes);
 app.use('/routines', routineRoutes);
 
+// Root Route
 app.get('/', (req, res) => res.send('Asian School API Running 🚀'));
 
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+// 3. Error Handling (Catch-all for route errors)
+app.use((err, req, res, next) => {
+  console.error('SERVER ERROR:', err.stack);
+  res.status(500).json({ message: "Internal Server Error" });
+});
+
+// 4. Start Server
+app.listen(PORT, () => {
+  console.log('-----------------------------------');
+  console.log(`🚀 ASIAN SCHOOL API IS ACTIVE`);
+  console.log(`📍 Port: ${PORT}`);
+  console.log(`🔗 Local: http://localhost:${PORT}`);
+  console.log('-----------------------------------');
+});

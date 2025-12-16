@@ -131,22 +131,24 @@ exports.getStudentById = async (req, res) => {
     const student = await prisma.user.findUnique({
       where: { id: id },
       include: {
-        enrollments: {
-          include: { section: true },
-          orderBy: { section: { academicYearId: 'desc' } }
+        enrollments: { include: { section: true } },
+        studentFees: { 
+            where: { status: 'PENDING' }, 
+            include: { feeStructure: true } 
         },
-        studentFees: {
-          where: { status: 'PENDING' }, 
-          include: { feeStructure: true }
-        },
-        finalResults: { orderBy: { createdAt: 'desc' }, take: 1 } // Needed for Profile Page
+        // 👇 TEMPORARY: Fetch ALL results to see what exists
+        finalResults: { include: { academicYear: true } } 
       }
     });
+
+    // 👇 ADD THIS DEBUG LOG
+    console.log("DEBUG: Final Results found:", student?.finalResults);
 
     if (!student) return res.status(404).json({ message: "Student not found" });
     res.json(student);
 
   } catch (error) {
+    console.error("Error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

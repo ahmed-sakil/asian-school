@@ -3,12 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../api';
 import { 
     User, Mail, Hash, School, 
-    Loader2, DollarSign, Award, CalendarCheck, Wallet 
-} from 'lucide-react'; // Removed ArrowLeft (handled by Header)
+    Loader2, DollarSign, Award, CalendarCheck, Wallet, 
+    AlertCircle 
+} from 'lucide-react'; 
 import FeeLedger from '../components/FeeLedger'; 
 import toast from 'react-hot-toast';
-
-// 1. IMPORT HEADER
 import PageHeader from '../components/PageHeader';
 
 const StudentProfile = () => {
@@ -16,6 +15,8 @@ const StudentProfile = () => {
   const navigate = useNavigate();
   
   const [student, setStudent] = useState(null);
+  // State for the Final Result
+  const [finalResult, setFinalResult] = useState(null); 
   const [attendanceStats, setAttendanceStats] = useState({ percentage: 0, presentDays: 0, absentDays: 0 }); 
   const [loading, setLoading] = useState(true);
 
@@ -26,16 +27,31 @@ const StudentProfile = () => {
         const profileRes = await api.get(`/users/students/${id}`);
         setStudent(profileRes.data);
 
-        // 2. Fetch Attendance Stats
+        // 2. Fetch Live Result (USING YOUR WORKING LOGIC)
+        try {
+            // 👇 Fixed: Matches exactly what you used in FinalResult.jsx
+            const resultRes = await api.get('/exams/final-result', {
+                params: { studentId: id }
+            });
+            
+            if (resultRes.data.found) {
+                setFinalResult(resultRes.data); 
+            }
+        } catch (err) {
+            console.log("No final result found yet");
+        }
+
+        // 3. Fetch Attendance
         try {
             const attRes = await api.get(`/attendance/student/${id}`);
             setAttendanceStats(attRes.data);
         } catch (attError) {
-            console.log("Attendance data not found (might be new student)");
+            console.log("Attendance data not found");
         }
 
       } catch (error) {
         toast.error("Error loading profile");
+        console.error(error);
       } finally {
         setLoading(false);
       }
@@ -53,42 +69,43 @@ const StudentProfile = () => {
 
   if (!student) return <div className="p-8 text-center text-slate-500">Student not found</div>;
 
-  // Helpers
+  // --- Helpers ---
   const currentEnrollment = student.enrollments?.[0];
   const sectionInfo = currentEnrollment 
     ? `Class ${currentEnrollment.section.classLevel} - ${currentEnrollment.section.sectionName}`
     : 'Not Enrolled';
 
-  // Finance Calc
   const totalDue = student.studentFees?.reduce((sum, fee) => {
     return fee.status === 'PENDING' ? sum + Number(fee.feeStructure.amount) : sum;
   }, 0) || 0;
 
-  // GPA Calc
-  const latestResult = student.finalResults?.[0]; 
-  const gpa = latestResult?.gpa || "N/A";
+  // --- Result Display Logic ---
+  const academicDisplay = finalResult 
+    ? `${finalResult.summary.percentage}%` 
+    : "N/A";
+    
+  const academicSubtitle = finalResult
+    ? `Rank: #${finalResult.summary.rank} (In Section)`
+    : "No exams finalized yet";
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       
-      {/* 2. PAGE HEADER */}
+      {/* PAGE HEADER */}
       <PageHeader 
         title="Student Profile" 
         subtitle="View detailed academic and financial records"
         backPath="/students"
       />
 
-      {/* 3. PROFILE HEADER CARD */}
+      {/* PROFILE HEADER CARD */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 flex flex-col md:flex-row items-center md:items-start gap-8 relative overflow-hidden">
-        {/* Decorative Blob */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-slate-50 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 -z-10"></div>
         
-        {/* Avatar */}
         <div className="w-24 h-24 md:w-32 md:h-32 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 shadow-inner border-4 border-white">
           <User size={48} />
         </div>
 
-        {/* Info */}
         <div className="flex-1 text-center md:text-left space-y-3 z-10">
           <div className="flex flex-col md:flex-row items-center gap-3">
              <h1 className="text-3xl font-bold text-slate-800">{student.fullName}</h1>
@@ -105,7 +122,7 @@ const StudentProfile = () => {
         </div>
       </div>
 
-      {/* 4. STATS GRID */}
+      {/* STATS GRID */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         
         {/* Finance Stats */}
@@ -126,16 +143,16 @@ const StudentProfile = () => {
             </p>
         </div>
 
-        {/* GPA Stats */}
+        {/* 👇 UPDATED ACADEMIC CARD (Uses finalResult state) */}
         <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
             <div className="flex items-center gap-3 mb-4">
                 <div className="p-2 rounded-lg bg-violet-50 text-violet-500">
                     <Award size={20} />
                 </div>
-                <h3 className="font-bold text-slate-700">Academic GPA</h3>
+                <h3 className="font-bold text-slate-700">Academic Result</h3>
             </div>
-            <span className="text-3xl font-bold text-slate-800">{gpa}</span>
-            <p className="text-xs text-slate-500 mt-1 font-medium">Latest Final Result</p>
+            <span className="text-3xl font-bold text-slate-800">{academicDisplay}</span>
+            <p className="text-xs text-slate-500 mt-1 font-medium">{academicSubtitle}</p>
         </div>
 
         {/* Attendance Stats */}
@@ -156,7 +173,7 @@ const StudentProfile = () => {
         </div>
       </div>
 
-      {/* 5. FEE LEDGER SECTION */}
+      {/* FEE LEDGER SECTION */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="p-5 border-b border-slate-100 bg-slate-50 flex items-center gap-3">
             <div className="p-2 bg-white border border-slate-200 rounded-lg text-slate-500 shadow-sm">
