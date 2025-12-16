@@ -5,9 +5,14 @@ const prisma = new PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_key_change_in_prod';
 
 // --- LOGIN ---
+// --- LOGIN ---
 exports.login = async (req, res) => {
   try {
     const { schoolId, password } = req.body;
+    
+    // Debugging: Check if data is arriving
+    console.log("Login attempt for:", schoolId); 
+
     const user = await prisma.user.findUnique({ where: { schoolId } });
 
     if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
@@ -16,10 +21,21 @@ exports.login = async (req, res) => {
 
     const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '1d' });
 
-    res.cookie('token', token, { httpOnly: true, secure: false, maxAge: 86400000 }); // 1 Day
+    // FIX: Cookie settings for Production vs Development
+    const isProduction = process.env.NODE_ENV === 'production';
+
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: isProduction, // MUST be true in production (HTTPS)
+      sameSite: isProduction ? 'none' : 'lax', // MUST be 'none' for cross-site
+      maxAge: 24 * 60 * 60 * 1000 // 1 Day
+    });
+
     res.json({ message: "Success", user: { id: user.id, fullName: user.fullName, role: user.role } });
 
   } catch (error) {
+    // FIX: Log the actual error so we can see it in Render logs
+    console.error("LOGIN ERROR:", error);
     res.status(500).json({ message: "Server Error" });
   }
 };
